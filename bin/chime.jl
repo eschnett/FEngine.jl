@@ -13,13 +13,17 @@ noise = Noise{T}(sqrt(1.0 * pfb_nsamples))
 # MonochromaticSource(f, A, angle_x, angle_y)
 Δf = adc_frequency / pfb_nsamples
 sources = [
-    MonochromaticSource{T}(1025 * Δf, (1.0, 0.0), 0.0, 0.0),
-    MonochromaticSource{T}(2048 * Δf, (1.0, 0.0), 0.0, 0.0),
+#    MonochromaticSource{T}(1025 * Δf, (1.0, 0.0), 0.0, 0.0),
+#    MonochromaticSource{T}(2048 * Δf, (1.0, 0.0), 0.0, 0.0),
+    MonochromaticSource{T}(800e6 - (800e6-400e6)/1024. * 717, (8.0, 0.0), 0.523598775598299, 2*0.00698131700797732)
 ]
 
 frb_sources = FRBSource{T}[]
 
-dishgrid = DishGrid{T}(20.0, 0.390625)
+# dish layout according to the CHIME overview paper
+# (https://doi.org/10.3847/1538-4365/ac6fd9) table 2. Note that 22.0 = 20+2
+# (cylinder with + spacing)
+dishgrid = DishGrid{T}(22.0, 0.3048)
 dishes = Dish[]
 for x in 0:3, y in 0:255
     push!(dishes, Dish(x, y))
