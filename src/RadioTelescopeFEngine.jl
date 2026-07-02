@@ -635,8 +635,9 @@ export fengine
         adc::ADC{T},
         pfb::PFB,
         ntimes::Int,
-        ntimes_chunksize::Int=ntimes,
-        freq_ids::Vector{Int},
+        ntimes_chunksize::Int=ntimes;
+        input_reorder::Union{Nothing,Vector{Int}}=nothing,
+        freq_ids::Vector{Int}=pfb.frequency_channels,
     )
 
 Run the F-Engine simulator.
@@ -651,7 +652,8 @@ Run the F-Engine simulator.
     - `pfb`: PRoperties of the F-Engine Fourier transform
     - `ntimes`: Number of time samples to produce
     - `ntimes_chunksize`: Simulate in chunks to reduce memory requirements; has no effect on output
-    - `freq_ids`: (Coarse) frequency ids to report in file
+    - `input_reorder`: Reorder inputs
+    - `freq_ids`: Frequency ids to report in file
 """
 function fengine(
     filename::AbstractString,
@@ -663,7 +665,8 @@ function fengine(
     adc::ADC{T},
     pfb::PFB,
     ntimes::Int,
-    ntimes_chunksize::Int=ntimes,
+    ntimes_chunksize::Int=ntimes;
+    input_reorder::Union{Nothing,Vector{Int}}=nothing,
     freq_ids::Vector{Int}=pfb.frequency_channels,
 ) where {T<:Real}
     println("F-Engine simulator")
@@ -708,15 +711,12 @@ function fengine(
         println("    HDF5 chunk size is $chunksize ($(prod(chunksize)÷1000000) MB)")
         dataset = create_dataset(h5file, "voltage", UInt8, datasetsize; dapl=dapl, chunk=chunksize, filters=filters)
 
+        attrs(dataset)["chord_metadata_version"] = [2, 0]
+
         attrs(dataset)["name"] = "E"
         attrs(dataset)["type"] = "int4x2_swapped_withoffset"
         attrs(dataset)["dim_names"] = ["T", "F", "P", "D"]
         attrs(dataset)["dim_scalings"] = [1, 1, 1, 1]
-
-        attrs(dataset)["dish_spacing_x"] = dishgrid.dx
-        attrs(dataset)["dish_spacing_y"] = dishgrid.dy
-        attrs(dataset)["dish_locations_x"] = [dish.ix for dish in dishes]
-        attrs(dataset)["dish_locations_y"] = [dish.iy for dish in dishes]
 
         attrs(dataset)["coarse_freq"] = freq_ids
         attrs(dataset)["freq_upchan_factor"] = fill(1, nfreqs)
@@ -724,7 +724,22 @@ function fengine(
 
         attrs(dataset)["time_downsampling_fpga"] = 1
         attrs(dataset)["fpga_seq_num"] = 0
+
+        # attrs(dataset)["telescope_name"]
         attrs(dataset)["seq_length_nsec"] = pfb.nsamples * adc.Δt * 1.0e+9
+        attrs(dataset)["gps_time_enabled"] = false
+        attrs(dataset)["num_polarizations"] = npolrs
+        attrs(dataset)["num_dishes"] = ndishes
+        # attrs(dataset)["itrs_lat_deg"]
+        # attrs(dataset)["itrs_lon_deg"]
+        # attrs(dataset)["grid_orientation"]
+        attrs(dataset)["grid_size_x"] = maximum(d -> d.ix, dishes) + 1
+        attrs(dataset)["grid_size_y"] = maximum(d -> d.iy, dishes) + 1
+        attrs(dataset)["feed_separation_x_m"] = dishgrid.dx
+        attrs(dataset)["feed_separation_y_m"] = dishgrid.dy
+        attrs(dataset)["dish_grid_indices"] = stack(d -> [d.ix, d.iy], dishes)
+        # attrs(dataset)["feed_positions_m"]
+
         flush(dataset)
 
         for chunk in 0:(nchunks - 1)
@@ -741,6 +756,12 @@ function fengine(
             println("    Writing to file...")
             t0 = time()
             xdata::AbstractArray{Int4x2}
+            if input_reorder !== nothing
+                xdata = reshape(xdata, (ndishes * npolrs, nfreqs, :))
+                xdata′ = copy(xdata)
+                xdata[input_reorder .+ 1, :, :] = xdata′
+                xdata = reshape(xdata, (ndishes, npolrs, nfreqs, :))
+            end
             dataset[:, :, :, (time0 + 1):(time0 + ntimes_chunksize)] = reinterpret(UInt8, xdata)
             flush(dataset)
             t1 = time()

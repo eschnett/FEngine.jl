@@ -1,6 +1,6 @@
 using RadioTelescopeFEngine
 
-filename = "/scratch/eschnett/voltage_charts.h5"
+filename = "/home/eschnett/data/voltage_charts.h5"
 
 T = Float64
 
@@ -34,8 +34,8 @@ end
 adc = ADC{T}(0, inv(adc_frequency))
 pfb = PFB(4, pfb_nsamples, collect(1000:1671)) # 300 MHz ... 501.3 MHz
 
-buffersize = 4096
-ntimes = 80 * buffersize        # approx 1 sec
+buffersize = 16384
+ntimes = 20 * buffersize        # approx 1 sec
 
 fengine(filename, noise, sources, frb_sources, dishgrid, dishes, adc, pfb, ntimes, buffersize)
 
